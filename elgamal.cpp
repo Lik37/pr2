@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cstdint>
+#include <vector>
 #include <random>
 
 #include "elgamal.h"
@@ -35,6 +36,14 @@ int64_t genB (int64_t m, int64_t p, int64_t y, int64_t k) {
     return (powModPrime(y, k, p) * m) % p;
 }
 
+vector<int64_t> generateElgamalKeys(int64_t minP, int64_t maxP, mt19937& gen) {
+    vector<int64_t> keys;
+    keys.push_back(genP(minP, maxP, gen)); // p
+    keys.push_back(genG(keys[0], gen)); // g
+    keys.push_back(genX(keys[0], gen)); // x
+    keys.push_back(genY(keys[0], keys[1], keys[2])); // y
+    return keys;
+}
 
 
 vector<uint8_t> pairsToBytes(const vector<CipherPair>& cipher) {

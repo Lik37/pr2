@@ -2,15 +2,13 @@
 #include <fstream>
 #include <sstream>
 #include <cstdint>
-#include <vector>
 #include <string>
+#include <vector>
 #include <random>
-#include <filesystem>
 
 #include "math_utils.h"
 #include "input_output.h"
 #include "elgamal.h"
-#include "menu_elgamal.h"
 
 using namespace std;
 
@@ -27,18 +25,19 @@ enum class MenuOption {
     MITM,
     FRACTION
 };
+enum class ElgamalOption {
+    EXIT = 0,
+    ENCRYPT,
+    DECRYPT
+};
+enum class ParamsElgamalOption {
+    EXIT = 0,
+    RUN,
+    ADD_INPUT,
+    ADD_KEY,
+    ADD_OUTPUT
+};
 
-void printMenu() {
-    cout << "\n========Меню========\n" <<
-    "1. Возведение в степень через Ферма и бинаронее возведение\n" <<
-    "2. Расчёт c*d mod m = 1\n" <<
-    "3. Расчёт d = c^-1 mod m\n" << 
-    "4. Эль-Гамаль, шифрование, дешифрование\n" << 
-    "5. MitM, эмуляция атаки посередине на протокол Эль-Гамаля\n" << 
-    "6. Решение уравнения 1256а + 847b = 119\n" << 
-    "0. Выход\n";
-    cout << "Выберите задание: ";
-}
 
 int main() {
     setlocale(LC_ALL, "ru");
@@ -46,7 +45,7 @@ int main() {
     bool mainRunning = 1;
     int choice;
     while (mainRunning) {
-        printMenu();
+        printMainMenu();
         if (!(cin >> choice)) {
             cerr << "Ошибка: ведите число.\n";
             cin.clear();
@@ -100,18 +99,7 @@ int main() {
                 vector<int64_t> vecQ, vecR, vecX, vecY;
                 evklid(c, d, vecQ, vecR, vecX, vecY);
 
-                cout << "\n" <<
-                "r\tu\tv\tq" << "\n" <<
-                vecR[0] << "\t" << vecX[0] << "\t" << vecY[0] << "\t" << "-\n" << 
-                vecR[1] << "\t" << vecX[1] << "\t" << vecY[1] << "\t" << "-\n";  
-                
-                for (size_t i = 2; i < vecR.size(); ++i) {
-                    cout << 
-                    vecR[i] << "\t" << 
-                    vecX[i] << "\t" << 
-                    vecY[i] << "\t" << 
-                    vecQ[i] << "\n";
-                }
+                printTableEvklid(vecQ, vecR, vecX, vecY);
 
                 cout << "\n" << 
                 "c * u + d * v = НОД:\n" <<
@@ -131,18 +119,7 @@ int main() {
                 vector<int64_t> vecQ, vecR, vecX, vecY;
                 evklid(c, m, vecQ, vecR, vecX, vecY);
 
-                cout << "\n" <<
-                "r\tu\tv\tq" << "\n" <<
-                vecR[0] << "\t" << vecX[0] << "\t" << vecY[0] << "\t" << "-\n" << 
-                vecR[1] << "\t" << vecX[1] << "\t" << vecY[1] << "\t" << "-\n";  
-                
-                for (size_t i = 2; i < vecR.size(); ++i) {
-                    cout << 
-                    vecR[i] << "\t" << 
-                    vecX[i] << "\t" << 
-                    vecY[i] << "\t" << 
-                    vecQ[i] << "\n";
-                }
+                printTableEvklid(vecQ, vecR, vecX, vecY);
 
                 int64_t gcd = vecR[vecR.size()-2];
                 cout << "\n" <<
@@ -158,7 +135,305 @@ int main() {
             }
 
             case MenuOption::ELGAMAL: {
-                menuElgamal();
+                
+
+                vector<uint8_t> inputData;
+                vector<int64_t> keys;
+                string outputPath;
+
+                bool elgamalRunning = 1;
+                bool paramsEditRunning;
+
+                while (elgamalRunning) {
+
+                    inputData.clear();
+
+                    printElgamalMenu();
+                    
+                    int modeChoice;
+                    if (!(cin >> modeChoice)) {
+                        cerr << "Ошибка: ведите число.\n";
+                        cin.clear();
+                        cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                        continue;
+                    }
+                    
+                    ElgamalOption modeOption = static_cast<ElgamalOption>(modeChoice);
+
+                    switch(modeOption) {
+
+                        case ElgamalOption::EXIT: {
+                            elgamalRunning = 0;
+                            break;
+                        }
+
+                        case ElgamalOption::ENCRYPT: {
+                            
+                            paramsEditRunning = 1;
+                            while (paramsEditRunning) {
+                                printElgamalSettings("Шифрование", inputData, keys, outputPath);
+
+                                int paramsChoice;
+                                if (!(cin >> paramsChoice)) {
+                                    cerr << "Ошибка: Введите число.\n";
+                                    cin.clear();
+                                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                                    continue;
+                                }
+                                
+                                ParamsElgamalOption paramsOption = static_cast<ParamsElgamalOption>(paramsChoice);
+                                
+                                switch(paramsOption) {
+                                    case ParamsElgamalOption::EXIT: {
+                                        paramsEditRunning = 0;
+                                        break;
+                                    }
+                                    
+                                    case ParamsElgamalOption::RUN: {
+                                        if (inputData.empty() || keys.empty()) {
+                                            cerr << "Ошибка: Необходимо добавить параметры\n";
+                                            break;
+                                        }
+
+                                        cout << "\n--Протокол Эль-Гамаля -> Шифрование -> Старт--\n";
+                                        auto cipherPairs = elgamalEncrypt(inputData, keys[0], keys[1], keys[3], gen);
+                                        auto ciphertext = pairsToBytes(cipherPairs);
+                                        if (outputPath.empty()) {
+                                            cout << "Шифротекст:\n" << dataToHex(ciphertext) << "\n";
+                                        } else {
+                                            if (dataToBinaryFile(ciphertext, outputPath)) {
+                                                cout << "Шифротекст успешно записан.\n";
+                                            } else {
+                                                cerr << "Ошибка записи.\n";
+                                            }
+                                        }
+                                        break;
+                                    }
+                                    
+                                    case ParamsElgamalOption::ADD_INPUT: {
+                                        cout << "\n--Протокол Эль-Гамаля -> Шифрование -> Ввод исходных данных--\n" <<
+                                        "Введите путь к файлу, либо нажмите ENTER, чтобы начать ввод из консоли\n";
+
+                                        string path;
+                                        cin.ignore();
+                                        getline(cin, path);
+
+                                        if (path.empty()) {
+                                            cout << "Введите строку, для завершения введите 'exit' с новой строки:\n";
+                                            inputData = readConsoleToBytes();
+                                            if (!inputData.empty() && inputData.back() == '\n')
+                                                inputData.pop_back();
+
+                                        } else {
+                                            ifstream file(path, ios::binary);
+                                            if (!file) {
+                                                cerr << "Ошибка: Не удалось открыть файл.\n";
+                                                break;
+                                            }
+                                            inputData = fromStreamToData(file);
+                                            if (inputData.empty())
+                                                cerr << "Ошибка: Файл пуст.\n";
+                                            file.close();
+                                        }
+
+                                        break;
+                                    }
+                                    
+                                    case ParamsElgamalOption::ADD_KEY: {
+                                        cout << "\n--Протокол Эль-Гамаля -> Шифрование -> Ввод ключа--\n" <<
+                                        "Введите по порядку p g x, либо нажмите ENTER, чтобы сгенерировать ключ\n";
+
+                                        string line;
+                                        cin.ignore();
+                                        getline(cin, line);
+                                        
+                                        if (line.empty()) {
+                                            cout << "Введите минимальное и максимальное значение p: ";
+                                            int64_t minP, maxP;
+                                            cin >> minP >> maxP;
+
+                                            if (minP < 256) {
+                                                cerr << "Ошибка: минимальное p должно быть больше 255\n";
+                                                break;
+                                            }
+                                            keys = generateElgamalKeys(minP, maxP, gen);
+
+                                        } else {
+                                            try {
+                                                keys = enterElgamalKeys(line);
+                                            } catch (const exception& e) {
+                                                cerr << "Ошибка: " << e.what() << "\n";
+                                            }
+                                        }
+                                        break;
+                                    }
+                                    
+                                    case ParamsElgamalOption::ADD_OUTPUT: {
+                                        cout << "\n--Протокол Эль-Гамаля -> Шифрование -> Добавление вывода--\n" <<
+                                        "Введите путь к файлу, либо нажмите ENTER, чтобы оставить вывод из консоли\n";
+
+                                        string path;
+                                        cin.ignore();
+                                        getline(cin, path);
+
+                                        if (path.empty()) {
+                                            outputPath = "";
+                                        } else {
+                                            if (solveOutputFile(path))
+                                                outputPath = path;
+                                        }
+
+                                        break;
+                                    }
+                                    
+                                    default: {
+                                        cerr << "Ошибка: такого выбора нет.";
+                                        break;
+                                    }
+
+                                }
+                            }
+
+                            break;
+                        }
+
+                        case ElgamalOption::DECRYPT: {
+                            paramsEditRunning = 1;
+                            while (paramsEditRunning) {
+                                printElgamalSettings("Расфрование", inputData, keys, outputPath);
+                                
+                                int paramsChoice;
+                                if (!(cin >> paramsChoice)) {
+                                    cerr << "Ошибка: Введите число.\n";
+                                    cin.clear();
+                                    cin.ignore(numeric_limits<streamsize>::max(), '\n');
+                                    continue;
+                                }
+
+                                ParamsElgamalOption paramsOption = static_cast<ParamsElgamalOption>(paramsChoice);
+
+                                switch(paramsOption) {
+                                    case ParamsElgamalOption::EXIT: {
+                                        paramsEditRunning = 0;
+                                        break;
+                                    }
+                                    
+                                    case ParamsElgamalOption::RUN: {
+                                        if (inputData.empty() || keys.empty()) {
+                                            cerr << "Ошибка: Необходимо добавить параметры\n";
+                                            break;
+                                        }
+
+                                        cout << "\n--Протокол Эль-Гамаля -> Расшифрование -> Старт--\n";
+                                        auto cipherPairs = bytesToPairs(inputData);
+                                        if (cipherPairs.empty()) {
+                                            cerr << "Ошибка: Некорректный шифротекст.\n";
+                                            break;
+                                        }
+                                        auto plaintext = elgamalDecrypt(cipherPairs, keys[0], keys[2]);
+                                        if (outputPath.empty()) {
+                                            cout << "Расшифрованный текст:\n";
+                                            for (uint8_t c : plaintext) {
+                                                    cout << static_cast<char>(c);
+                                            }
+                                            cout << "\n";
+                                        } else {
+                                            if (dataToBinaryFile(plaintext, outputPath)) {
+                                                cout << "Расшифрованные данные успешно записаны.\n";
+                                            } else {
+                                                cerr << "Ошибка записи.\n";
+                                            }
+                                        }
+                                        break;
+                                    }
+                                    
+                                    case ParamsElgamalOption::ADD_INPUT: {
+                                        cout << "\n--Протокол Эль-Гамаля -> Расшифрование -> Ввод шифротекста--\n" <<
+                                        "Введите путь к файлу, либо нажмите ENTER, чтобы ввести HEX-строку\n";
+
+                                        string path;
+                                        cin.ignore();
+                                        getline(cin, path);
+
+                                        if (path.empty()) {
+                                            if (path.empty()) {
+                                            cout << "Введите HEX-строку (байты через пробел):\n";
+                                            string input;
+                                            getline(cin, input);
+                                            inputData = hexToData(input);
+                                            }
+                                        } else {
+                                            ifstream file(path, ios::binary);
+                                            if (!file) {
+                                                cerr << "Ошибка: Не удалось открыть файл.\n";
+                                                break;
+                                            }
+                                            inputData = fromStreamToData(file);
+                                            if (inputData.empty())
+                                                cerr << "Ошибка: Файл пуст.\n";
+                                            file.close();
+                                        }
+
+                                        break;
+                                    }
+                                    
+                                    case ParamsElgamalOption::ADD_KEY: {
+                                        cout << "\n--Протокол Эль-Гамаля -> Расшифрование -> Ввод ключа--\n" <<
+                                        "Введите по порядку p g x\n";
+
+                                        keys.clear();
+
+                                        string line;
+                                        cin.ignore();
+                                        getline(cin, line);
+
+                                        try {
+                                            keys = enterElgamalKeys(line);
+                                        } catch (const exception& e) {
+                                            cerr << "Ошибка: " << e.what() << "\n";
+                                        }
+
+                                        break;
+                                    }
+                                    
+                                    case ParamsElgamalOption::ADD_OUTPUT: {
+                                        cout << "\n--Протокол Эль-Гамаля -> Расшифрование -> Добавление вывода--\n" <<
+                                        "Введите путь к файлу, либо нажмите ENTER, чтобы оставить вывод в консоли\n";
+
+                                        string path;
+                                        cin.ignore();
+                                        getline(cin, path);
+
+                                        if (path.empty()) {
+                                            outputPath = "";
+                                        } else {
+                                            if (solveOutputFile(path))
+                                                outputPath = path;
+                                        }
+
+                                        break;
+                                    }
+                                    
+                                    default: {
+                                        cerr << "Ошибка: такого выбора нет.";
+                                        break;
+                                    }
+
+                                } 
+                            }
+
+                            break;
+                        }
+                    
+                        default: {
+                            cerr << "Ошибка: такого выбора нет.";
+                            break;
+                        }
+
+                    }
+                }
+                
+
                 break;
             }
 
@@ -194,14 +469,15 @@ int main() {
             }
 
             case MenuOption::FRACTION: {
+                cout << "\n-------- Эмуляция атаки посередине (MitM) --------\n";
                 int64_t a = 1256, b = 847, d = 119;
 
-                cout << "Уравнение: " << a << "x + " << b << "y = " << d << endl << endl;
+                cout << "Уравнение: " << a << "x + " << b << "y = " << d << "\n\n";
 
                 vector<int64_t> vecQ, vecR, vecX, vecY;
                 evklid(a, b, vecQ, vecR, vecX, vecY);
 
-                cout << "Цепная дробь:" << endl;
+                cout << "Цепная дробь:\n";
 
                 vector<int64_t> continuedFraction = vecQ;
                 cout << a << "/" << b << " = " << continuedFraction[0];
@@ -212,16 +488,16 @@ int main() {
                 for (size_t j = 1; j < i; ++j) {
                     cout << ")";
                 }
-                cout << endl;
-                cout << "[" << continuedFraction[0];
+                cout << "\n[" << continuedFraction[0];
                 for (size_t i = 1; i < continuedFraction.size(); ++i) {
                     cout << ", " << continuedFraction[i];
                 }
-                cout << "]" << endl << endl;
+                cout << "]\n\n";
+                
 
                 int64_t nod = vecR[vecR.size() - 2];
                 if (d % nod != 0) {
-                    cout << "Нет решения, D не делится на НОД=" << nod << endl;
+                    cout << "Нет решения, D не делится на НОД=" << nod << "\n";
                     return 0;
                 }
 
@@ -229,12 +505,12 @@ int main() {
                 int64_t x0 = u * d / nod, y0 = v * d / nod;
                 int64_t x = x0 % b, y = y0 % a;
 
-                cout << "Представление НОД:\n" << a << " * " << u << " + " << b << " * " << v << " = " << nod << endl;
-                cout << "Частное решение:\n" << a << " * " << x0 << " + " << b << " * " << y0 << " = " << d << endl;
-                cout << "Уменьшенное решение:\n" << a << " * " << x << " + " << b << " * " << y << " = " << d << endl;
-                cout << endl;
-                cout << "Решение в общем виде:\n" << a << " * (" << x << " + " << b << "*t)" << " + " 
-                    << b << " * (" << y << " - " << a << "*t)" << " = " << d << endl;
+                cout << 
+                "Представление НОД:\n" << a << " * " << u << " + " << b << " * " << v << " = " << nod << "\n" <<
+                "Частное решение:\n" << a << " * " << x0 << " + " << b << " * " << y0 << " = " << d << "\n" <<
+                "Уменьшенное решение:\n" << a << " * " << x << " + " << b << " * " << y << " = " << d << "\n" <<
+                "\nРешение в общем виде:\n" << a << " * (" << x << " + " << b << "*t)" << " + " 
+                    << b << " * (" << y << " - " << a << "*t)" << " = " << d << "\n";
 
                 break;
             }
