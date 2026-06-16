@@ -101,7 +101,7 @@ void printElgamalMenu() {
     cout << "Выберите опцию: ";
 }
 
-void printElgamalSettings(string mode, vector<uint8_t> inputData, vector<int64_t> keys, string outputPath) {
+void printElgamalSettings(string mode, const vector<uint8_t>& inputData, const vector<uint8_t>& keys, string outputPath) {
     cout << "\n----Протокол Эль-Гамаля -> " << mode << "----\n" <<
     "1. Начать\n" <<
 
